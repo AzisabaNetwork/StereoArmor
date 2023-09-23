@@ -59,50 +59,58 @@ public class StereoArmorPlugin extends JavaPlugin {
         playerTimer.schedule(new TimerTask() {
             @Override
             public void run() {
-                int current = playerTick.getAndIncrement();
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    if (player.getGameMode() == GameMode.SPECTATOR) continue;
-                    ItemStack item = player.getInventory().getLeggings();
-                    if (item == null || !item.hasItemMeta()) continue;
-                    ItemMeta meta = item.getItemMeta();
-                    String identifier = meta.getPersistentDataContainer().get(fileKey, PersistentDataType.STRING);
-                    if (identifier == null) continue;
-                    NBSFile file = nbs.get(identifier);
-                    if (file == null) {
-                        player.sendActionBar(ChatColor.RED + "このNBSファイルは読み込まれていません。");
-                        continue;
+                try {
+                    int current = playerTick.getAndIncrement();
+                    for (Player player : Bukkit.getOnlinePlayers()) {
+                        if (player.getGameMode() == GameMode.SPECTATOR) continue;
+                        ItemStack item = player.getInventory().getLeggings();
+                        if (item == null || !item.hasItemMeta()) continue;
+                        ItemMeta meta = item.getItemMeta();
+                        String identifier = meta.getPersistentDataContainer().get(fileKey, PersistentDataType.STRING);
+                        if (identifier == null) continue;
+                        NBSFile file = nbs.get(identifier);
+                        if (file == null) {
+                            player.sendActionBar(ChatColor.RED + "このNBSファイルは読み込まれていません。");
+                            continue;
+                        }
+                        int lastTick = (int) (Objects.requireNonNull(file.getLastTick()).getStartingTick() / (file.getHeader().getTempo() / 2000F));
+                        for (NBSTick tick : file.getTickMap().getOrDefault(current % lastTick, Collections.emptyList())) {
+                            tick.getLayers().stream().filter(Objects::nonNull).findAny().ifPresent(note ->
+                                    player.getWorld().spawnParticle(Particle.NOTE, player.getLocation().clone().add(0, 2.4, 0), 1, 0, 0, 0, note.getInstrument())
+                            );
+                            NBSBukkitHelper.play(file, tick, player, player.getLocation(), 1, true);
+                        }
                     }
-                    int lastTick = (int) (Objects.requireNonNull(file.getLastTick()).getStartingTick() / (file.getHeader().getTempo() / 2000F));
-                    for (NBSTick tick : file.getTickMap().getOrDefault(current % lastTick, Collections.emptyList())) {
-                        tick.getLayers().stream().filter(Objects::nonNull).findAny().ifPresent(note ->
-                                player.getWorld().spawnParticle(Particle.NOTE, player.getLocation().clone().add(0, 2.4, 0), 1, 0, 0, 0, note.getInstrument())
-                        );
-                        NBSBukkitHelper.play(file, tick, player, player.getLocation(), 1, true);
-                    }
+                } catch (Exception e) {
+                    getSLF4JLogger().warn("Exception during playerTimer loop", e);
                 }
             }
         }, 50, 50);
         worldTimer.schedule(new TimerTask() {
             @Override
             public void run() {
-                int current = worldTick.getAndIncrement();
-                for (World world : Bukkit.getWorlds()) {
-                    for (ItemFrame itemFrame : world.getEntitiesByClass(ItemFrame.class)) {
-                        ItemStack item = itemFrame.getItem();
-                        if (!item.hasItemMeta() || item.getType() == Material.FILLED_MAP) continue;
-                        ItemMeta meta = item.getItemMeta();
-                        String identifier = meta.getPersistentDataContainer().get(fileKey, PersistentDataType.STRING);
-                        if (identifier == null) continue;
-                        NBSFile file = nbs.get(identifier);
-                        if (file == null) continue;
-                        int lastTick = (int) (Objects.requireNonNull(file.getLastTick()).getStartingTick() / (file.getHeader().getTempo() / 2000F));
-                        for (NBSTick tick : file.getTickMap().getOrDefault(current % lastTick, Collections.emptyList())) {
-                            tick.getLayers().stream().filter(Objects::nonNull).findAny().ifPresent(note ->
-                                    itemFrame.getWorld().spawnParticle(Particle.NOTE, itemFrame.getLocation().clone().add(0, 0.4, 0), 1, 0, 0, 0, note.getInstrument())
-                            );
-                            NBSBukkitHelper.play(file, tick, null, itemFrame.getLocation(), 1, true);
+                try {
+                    int current = worldTick.getAndIncrement();
+                    for (World world : Bukkit.getWorlds()) {
+                        for (ItemFrame itemFrame : world.getEntitiesByClass(ItemFrame.class)) {
+                            ItemStack item = itemFrame.getItem();
+                            if (!item.hasItemMeta() || item.getType() == Material.FILLED_MAP) continue;
+                            ItemMeta meta = item.getItemMeta();
+                            String identifier = meta.getPersistentDataContainer().get(fileKey, PersistentDataType.STRING);
+                            if (identifier == null) continue;
+                            NBSFile file = nbs.get(identifier);
+                            if (file == null) continue;
+                            int lastTick = (int) (Objects.requireNonNull(file.getLastTick()).getStartingTick() / (file.getHeader().getTempo() / 2000F));
+                            for (NBSTick tick : file.getTickMap().getOrDefault(current % lastTick, Collections.emptyList())) {
+                                tick.getLayers().stream().filter(Objects::nonNull).findAny().ifPresent(note ->
+                                        itemFrame.getWorld().spawnParticle(Particle.NOTE, itemFrame.getLocation().clone().add(0, 0.4, 0), 1, 0, 0, 0, note.getInstrument())
+                                );
+                                NBSBukkitHelper.play(file, tick, null, itemFrame.getLocation(), 1, true);
+                            }
                         }
                     }
+                } catch (Exception e) {
+                    getSLF4JLogger().error("Exception during worldTimer loop", e);
                 }
             }
         }, 50, 50);
